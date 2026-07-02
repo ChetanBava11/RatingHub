@@ -4,8 +4,8 @@ import { PageShell } from "@/components/Navbar";
 import { Btn, Card } from "@/components/ui-kit/Btn";
 import { TextField } from "@/components/ui-kit/Field";
 import { getAuth, roleHome } from "@/lib/auth";
-import { loadDB, saveDB } from "@/lib/mock";
 import { validatePassword } from "@/lib/validation";
+import { authApi, ApiResponseError } from "@/lib/api";
 
 export const Route = createFileRoute("/update-password")({
   head: () => ({
@@ -27,27 +27,43 @@ function UpdatePasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<Record<string, string | null>>({});
   const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
     if (!auth) return;
-    const db = loadDB();
-    const u = db.users.find((x) => x.id === auth.user.id);
+
+    // Client-side checks first
     const errs: Record<string, string | null> = {
-      current: u && u.password === current ? null : "Current password is incorrect.",
       next: validatePassword(next),
       confirm: next === confirm ? null : "Passwords do not match.",
     };
     setErrors(errs);
     if (Object.values(errs).some((v) => v)) return;
-    if (u) {
-      u.password = next;
-      saveDB(db);
-      setMessage("Password updated successfully.");
+
+    setLoading(true);
+    try {
+      const res = await authApi.changePassword({ current, next });
+      setMessage(res.message);
       setCurrent("");
       setNext("");
       setConfirm("");
+      setErrors({});
+    } catch (err) {
+      if (err instanceof ApiResponseError) {
+        // Backend may return field-level errors or a top-level message
+        if (err.body.errors) {
+          setErrors((prev) => ({ ...prev, ...err.body.errors }));
+        } else {
+          // e.g. "Current password is incorrect."
+          setErrors((prev) => ({ ...prev, current: err.body.message ?? null }));
+        }
+      } else {
+        setErrors({ current: "Network error — please try again." });
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -68,7 +84,7 @@ function UpdatePasswordPage() {
           <TextField label="New password" type="password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.next} hint="8–16 chars, uppercase + special" />
           <TextField label="Confirm new password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} error={errors.confirm} />
           {message && <p className="text-sm text-primary">{message}</p>}
-          <Btn type="submit">Update password</Btn>
+          <Btn type="submit" disabled={loading}>{loading ? "Updating…" : "Update password"}</Btn>
         </form>
       </Card>
     </PageShell>

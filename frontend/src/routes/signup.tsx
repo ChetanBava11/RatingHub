@@ -3,8 +3,8 @@ import { useState } from "react";
 import { Btn, Card } from "@/components/ui-kit/Btn";
 import { TextField, TextArea } from "@/components/ui-kit/Field";
 import { validateAddress, validateEmail, validateName, validatePassword } from "@/lib/validation";
-import { loadDB, saveDB } from "@/lib/mock";
 import { setAuth, roleHome } from "@/lib/auth";
+import { authApi, ApiResponseError } from "@/lib/api";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -40,21 +40,25 @@ function SignupPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
+    // Run client-side validation first for instant feedback
     if (!validate()) return;
     setLoading(true);
     try {
-      // await fetch("/api/auth/signup", { method: "POST", body: JSON.stringify(form) });
-      const db = loadDB();
-      if (db.users.some((u) => u.email.toLowerCase() === form.email.toLowerCase())) {
-        setSubmitError("An account with that email already exists.");
-        return;
+      const res = await authApi.signup(form);
+      setAuth(res.token, res.user);
+      navigate({ to: roleHome(res.user.role) });
+    } catch (err) {
+      if (err instanceof ApiResponseError) {
+        // Backend may return field-level errors — merge them into the errors state
+        if (err.body.errors) {
+          setErrors((prev) => ({ ...prev, ...err.body.errors }));
+        } else {
+          // Top-level message (e.g. duplicate email)
+          setSubmitError(err.body.message ?? "Signup failed.");
+        }
+      } else {
+        setSubmitError("Network error — please try again.");
       }
-      const id = "u_" + Math.random().toString(36).slice(2, 8);
-      db.users.push({ id, ...form, role: "user" });
-      saveDB(db);
-      const token = "mock." + btoa(id + ":user");
-      setAuth(token, { id, name: form.name, email: form.email, role: "user" });
-      navigate({ to: roleHome("user") });
     } finally {
       setLoading(false);
     }

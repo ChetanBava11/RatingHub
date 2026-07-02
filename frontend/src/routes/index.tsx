@@ -2,8 +2,8 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Btn, Card } from "@/components/ui-kit/Btn";
 import { TextField } from "@/components/ui-kit/Field";
-import { loadDB } from "@/lib/mock";
 import { setAuth, roleHome, getAuth } from "@/lib/auth";
+import { authApi, ApiResponseError } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -33,17 +33,15 @@ function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      // Placeholder endpoint — resolves via local mock DB for now.
-      // await fetch("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-      const db = loadDB();
-      const u = db.users.find((x) => x.email.toLowerCase() === email.toLowerCase() && x.password === password);
-      if (!u) {
-        setError("Invalid email or password.");
-        return;
+      const res = await authApi.login({ email, password });
+      setAuth(res.token, res.user);
+      navigate({ to: roleHome(res.user.role) });
+    } catch (err) {
+      if (err instanceof ApiResponseError) {
+        setError(err.body.message ?? "Login failed.");
+      } else {
+        setError("Network error — please try again.");
       }
-      const token = "mock." + btoa(u.id + ":" + u.role);
-      setAuth(token, { id: u.id, name: u.name, email: u.email, role: u.role, storeId: u.storeId });
-      navigate({ to: roleHome(u.role) });
     } finally {
       setLoading(false);
     }
