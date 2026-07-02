@@ -2,23 +2,42 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import authRouter from './routes/auth';
+import adminRouter from './routes/admin';
+import storesRouter from './routes/stores';
+import ratingsRouter from './routes/ratings';
+import ownerRouter from './routes/owner';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 
-// ─── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors());
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+
+app.use(
+  cors({
+    origin: FRONTEND_URL,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    credentials: true,
+  })
+);
+
+// ─── Body Parsers ─────────────────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// ─── Health ───────────────────────────────────────────────────────────────────
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok' });
 });
 
-// Auth routes
+// ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/stores', storesRouter);
+app.use('/api/ratings', ratingsRouter);
+app.use('/api/owner', ownerRouter);
 
 // ─── 404 Handler ──────────────────────────────────────────────────────────────
 app.use((_req, res) => {
@@ -26,22 +45,14 @@ app.use((_req, res) => {
 });
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
-app.use(
-  (
-    err: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error('[Unhandled Error]', err);
-    res.status(500).json({ success: false, message: 'Internal server error' });
-  }
-);
+// Must be registered last — Express identifies error handlers by 4 arguments.
+app.use(errorHandler);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`   Health check: http://localhost:${PORT}/health`);
+  console.log(`   Health check: http://localhost:${PORT}/api/health`);
+  console.log(`   CORS origin:  ${FRONTEND_URL}`);
 });
 
 export default app;
